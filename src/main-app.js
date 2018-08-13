@@ -8,6 +8,7 @@ class MatButton extends LitElement {
   render() {
     return html`
       <style>
+
         .btn {
           display: inline-block;
           position: relative;
@@ -49,6 +50,14 @@ export class MainApp extends LitElement {
     this._onTemperatureChange = this._onTemperatureChange.bind(this);
     this._onAccelChange = this._onAccelChange.bind(this);
     this._onButtonChange = this._onButtonChange.bind(this);
+    this.drawGame=this.drawGame.bind(this)
+    this.position= {
+      x : 1,
+      y : 1
+    }
+    this.newColor = "#00ff00"
+    this.lose = null
+    this.buttonClicked = false
   }
 
   _renderDeviceInfo() {
@@ -82,10 +91,18 @@ export class MainApp extends LitElement {
   }
 
   render() {
+    // if(this.buttonClicked){
+    //   return this.drawGame()
+    // }
     return html`
       <style>
         :host {
           font-family: Roboto, Arial;
+        }
+        .lose{
+          font-family: 'Press Start 2P', cursive;
+          font-size: 35px;
+          text-align: center;
         }
         .mini-button {
           font-size: 8pt;
@@ -94,16 +111,21 @@ export class MainApp extends LitElement {
           font-weight: bold;
         }
       </style>
-      <h1>Nordic Thingy:52 - Web Bluetooth Tester</h1>
-      <br>
       <mat-button on-click='${ _ => this._scan()}'>CONNECT <b>THINGY:52</b></mat-button>
       <br><br>
+        <button on-click="${this.drawGame}">Play the Game</button>
+
       <p>
         <h2 class="title">Devices:</h2><br>
         ${this._renderDeviceInfo()}
       </p>
+      ${this.lose ? html `<div class="lose">
+        <h2>GAME OVER</h2>
+        </div>` : ``}
+
     `;
   }
+
 
   // When the GATT server is disconnected, remove the device from the list
   _deviceDisconnected(device) {
@@ -130,8 +152,61 @@ export class MainApp extends LitElement {
     this._devices[idx].data.temperature = `${integer}.${decimal}°C`;
     this.invalidate();
   }
+  drawGame(){
+  const me = this;
+  const canvas = document.getElementById("thingy-canvas");
+  const ctx = canvas.getContext("2d");
+  let x = canvas.width/2;
+  let y = canvas.height-30;
+  var dx = 2;
+  var dy = -2;
+  const ballRadius =10
+  const paddleHeight = 10;
+  const paddleWidth = 150;
+  const paddleX = (canvas.width-paddleWidth)/2;
+  function drawBall(){
+  console.log('0-0-0-0-7--0-8')
+  ctx.beginPath();
+  ctx.arc(x, y, 20, 0, Math.PI*2, false);
+  ctx.fillStyle = "#006600";
+  ctx.fill();
+  ctx.closePath();
+  }
+  function drawPaddel(){
+    ctx.beginPath();
+    ctx.rect(me.position.x * 75, canvas.height-paddleHeight, paddleWidth, paddleHeight);
+    ctx.fillStyle = "#006600";
+    ctx.fill();
+    ctx.closePath();
+ }
+  function draw(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawBall();
+    drawPaddel()
+
+   if(x + dx > canvas.width-ballRadius || x + dx < ballRadius) {
+        dx = -dx;
+    }
+    if(y + dy < ballRadius) {
+        dy = -dy;
+    }
+    else if(y + dy > canvas.height-ballRadius) {
+        if(x > me.position.x * 75 && x < me.position.x * 75 + paddleWidth) {
+            dy = -dy;
+        }
+        else {
+            me.lose = true
+            return;
+        }
+    }
+     x += dx;
+     y += dy;
+  }
+  setInterval(draw, 10);
+  }
 
   _onAccelChange(event) {
+    const me =this
     const target = event.target;
     const idx = this._devices.findIndex(dev => dev.device === target.service.device);
     if (idx < 0) {
@@ -143,16 +218,25 @@ export class MainApp extends LitElement {
       y: +target.value.getFloat32(4, true).toPrecision(5),
       z: +target.value.getFloat32(8, true).toPrecision(5)
     };
-
     this.invalidate();
-  }
 
+    if(!me.lose){
+       me.position = {
+        x : this._devices[idx].data.accel.x,
+        y : this._devices[idx].data.accel.y
+      }
+    }else{
+        me.position = {x: 0 , y : 0}
+      }
+  }
   _onButtonChange(event) {
+    const me = this
     const target = event.target;
     const idx = this._devices.findIndex(dev => dev.device === target.service.device);
     if (idx < 0) {
       return;
     }
+    me.buttonClicked = true
 
     const device = this._devices[idx];
     const button = device.data.button = target.value.getUint8(0) === 1;
@@ -161,6 +245,7 @@ export class MainApp extends LitElement {
     if (device.led) {
       const hexToRGB = hex => hex.match(/[A-Za-z0-9]{2}/g).map(v => parseInt(v, 16));
       const color = hexToRGB(button ? '#ff0000' : '#00ff00');
+      me.newColor = button ? '#ff0000' : '#00ff00'
       return device.led.writeValue(new Uint8Array([1, ...color]));
     }
   }
